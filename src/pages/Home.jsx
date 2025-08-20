@@ -2,7 +2,7 @@ export default function Home() {
   return (
     <section className="stack">
       <div className="hero">
-        <img src="/profile.png" alt="Heng Hugo Zhao" className="hero__img" />
+        <img src="/profile.jpg" alt="Heng Hugo Zhao" className="hero__img" />
         <div className="hero__text">
           <h1>Heng (Hugo) Zhao</h1>
             <p style={{ color: "var(--muted)", marginTop: "-0.5rem" }}>
