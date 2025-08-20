@@ -26,7 +26,7 @@ export default function Header() {
           <NavLink to="/publications" className={navLink}>Publications</NavLink>
           <NavLink to="/news" className={navLink}>Recent News</NavLink>
           <NavLink to="/misc" className={navLink}>Miscellanea</NavLink>
-          <a href="/public/heng_cv.pdf" className="nav-link" target="_blank" rel="noreferrer">CV</a>
+          <a href="/heng_cv.pdf" className="nav-link" target="_blank" rel="noreferrer">CV</a>
         </nav>
 
         <button className="btn" onClick={() => setDark((v) => !v)}>
