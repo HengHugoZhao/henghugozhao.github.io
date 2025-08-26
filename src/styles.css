@@ -20,6 +20,7 @@ a:hover {
   grid-template-columns: 140px 1fr;
   gap: 1rem;
   align-items: start;
+  width: 100%;
 }
 
 .pub__thumb {
@@ -31,7 +32,7 @@ a:hover {
   background: var(--card);
 }
 
-.pub__body { display: grid; gap: .25rem; }
+.pub__body { display: grid; gap: .25rem; overflow-wrap: break-word; }
 .pub__titleLink { text-decoration: none; }
 .pub__titleLink:hover { text-decoration: underline; }
 .pub__venue em { font-style: italic; }
@@ -114,7 +115,7 @@ a:hover {
 .card:hover { transform: translateY(-1px); transition: transform .15s ease; }
 
 .pubs { display:grid; gap: 1rem; }
-.pub { padding: 1rem; border:1px solid var(--border); border-radius: 12px; background: var(--card); }
+.pub { padding: 1rem; border:1px solid var(--border); border-radius: 12px; background: var(--card); max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
 .pub__title { font-weight: 600; }
 .pub__authors, .pub__venue, .pub__note { color: var(--muted); }
 .pub__note { font-style: italic; }
