@@ -23,7 +23,7 @@ export default function Home() {
           <p>
             I obtained a B.S. degree with <i>Cum Laude</i> in CS and Stats at Wake Forest University, 
             where I was fortunate to conduct undergraduate research advised by{" "}
-            <a href="https://yangfan.sites.wfu.edu" target="_blank" rel="noreferrer">Dr. Fan Yang</a>.
+            <a href="https://yangfan.sites.wfu.edu" target="_blank" rel="noreferrer">Dr. Fan Yang</a>, and <a href="https://berenhaut.sites.wfu.edu" target="_blank" rel="noreferrer">Dr. Kenneth S. Berenhaut</a>.
             Much of my work there focused on <b>interpretable large language models (LLMs)</b>--investigating how concepts are represented inside model embeddings, and how those representations can be made more interpretable.
           </p>
         </div>
