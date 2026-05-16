@@ -23,8 +23,6 @@ export default function Header() {
 
         <nav className="nav">
           <NavLink to="/" className={navLink} end>Home</NavLink>
-          <NavLink to="/publications" className={navLink}>Publications</NavLink>
-          <NavLink to="/news" className={navLink}>Recent News</NavLink>
           <NavLink to="/misc" className={navLink}>Miscellanea</NavLink>
           <a href="/heng_cv.pdf" className="nav-link" target="_blank" rel="noreferrer">CV</a>
         </nav>
