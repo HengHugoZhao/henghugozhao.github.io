@@ -78,8 +78,8 @@ export default function Home() {
           <section>
             <h3 className="info-heading">Interests</h3>
             <ul className="interest-list">
+              <li>Probabilistic ML</li>
               <li>Trustworthy AI</li>
-              <li>Interpretable Learning</li>
               <li>Model Explainability</li>
               <li>Neurosymbolic AI</li>
             </ul>
