@@ -2,6 +2,24 @@
 // src/data/publications.js
 export default [
   {
+    id: "probmoe-icml26",
+    title:
+      "ProbMoE: Differentiable Probabilistic Routing for Mixture-of-Experts",
+    authors:
+      "<strong>H. Zhao</strong>, Z. Shao, G. Van den Broeck, Z. Zeng",
+    venue: "ICML",
+    year: 2026,
+    thumb: "/probmoe_framework.png",
+    project: "https://arxiv.org/abs/2606.01509",
+    abstract:
+      "We introduce ProbMoE, a probabilistic routing framework that models expert selection as a distribution over cardinality-constrained expert subsets and formulates routing as probabilistic inference in this discrete subset space. ProbMoE Exact-k achieves strong performance compared to competitive baselines, with improved expert utilization and routing diversity; ProbMoE Dynamic-k achieves comparable performance with fewer activated experts.",
+    links: {
+      pdf: "https://arxiv.org/abs/2606.01509",
+      code: "https://github.com/HengHugoZhao/ProbMoE"
+    },
+    note: ""
+  },
+  {
     id: "gcs-iclr25",
     title:
       "Beyond Single Concept Vector: Modeling Concept Subspace in LLMs with Gaussian Distribution",
