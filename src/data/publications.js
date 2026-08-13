@@ -10,7 +10,7 @@ export default [
     venue: "ICML",
     year: 2026,
     thumb: "/probmoe_framework.png",
-    project: "https://arxiv.org/abs/2606.01509",
+    project: "/projects/probmoe/",
     abstract:
       "We introduce ProbMoE, a probabilistic routing framework that models expert selection as a distribution over cardinality-constrained expert subsets and formulates routing as probabilistic inference in this discrete subset space. ProbMoE Exact-k achieves strong performance compared to competitive baselines, with improved expert utilization and routing diversity; ProbMoE Dynamic-k achieves comparable performance with fewer activated experts.",
     links: {
@@ -38,4 +38,3 @@ export default [
     note: "" // e.g., Spotlight, Oral, Under Review, etc. (optional)
   }
 ];
-

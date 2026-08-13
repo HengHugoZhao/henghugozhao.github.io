@@ -42,7 +42,7 @@ export default function Home() {
           <a href="https://github.com/HengHugoZhao" className="sidebar__icon" title="GitHub" target="_blank" rel="noreferrer">
             <IconGithub />
           </a>
-          <a href="https://scholar.google.com/" className="sidebar__icon" title="Google Scholar" target="_blank" rel="noreferrer">
+          <a href="https://scholar.google.com/citations?hl=en&user=E6CZurQAAAAJ" className="sidebar__icon" title="Google Scholar" target="_blank" rel="noreferrer">
             <IconScholar />
           </a>
         </div>
