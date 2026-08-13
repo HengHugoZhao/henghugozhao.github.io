@@ -186,6 +186,22 @@
     border-top: 1px solid var(--rule); padding-top: 24px; margin-top: 72px;
     font-size: .85rem; color: var(--muted);
   }
+  .citation-section { margin: 84px 0 0; scroll-margin-top: 24px; }
+  .citation-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    margin-bottom: 14px;
+  }
+  .citation-head h2 { margin: 0; font-size: 1.55rem; }
+  .citation-copy {
+    flex: none; min-width: 88px; padding: 8px 13px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
+    box-shadow: var(--shadow); font: 650 .8rem ui-sans-serif, system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .citation-copy:hover { color: var(--up); border-color: var(--up); }
+  .citation-copy:focus-visible { outline: 2px solid var(--up); outline-offset: 3px; }
+  .citation-code { margin: 0; padding: 20px 22px; font-size: .78rem; }
+  .citation-status { min-height: 1.4em; margin: 8px 0 0; color: var(--up); font-size: .78rem; }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
   /* Paper landing page */
@@ -491,8 +507,8 @@
   </div>
   <p class="affiliations"><sup>1</sup> University of Virginia &nbsp;&middot;&nbsp; <sup>2</sup> University of California, Los Angeles</p>
   <div class="paper-actions">
-    <a href="https://openreview.net/pdf?id=7zOtnPt85B">OpenReview PDF</a>
-    <a href="https://arxiv.org/abs/2606.01509">arXiv</a>
+    <a href="https://openreview.net/pdf?id=7zOtnPt85B">PDF</a>
+    <a href="#citation">Citation</a>
     <a href="https://github.com/HengHugoZhao/ProbMoE">Code</a>
   </div>
 </header>
@@ -1198,6 +1214,22 @@ router_weights = torch.gather(w_full, 1, selected_experts)</code></pre>
   </div>
 </section>
 
+<section class="citation-section" id="citation" aria-labelledby="citation-title">
+  <div class="citation-head">
+    <h2 id="citation-title">Citation</h2>
+    <button class="citation-copy" id="citationCopy" type="button">Copy BibTeX</button>
+  </div>
+  <pre class="citation-code"><code id="citationText">@inproceedings{
+zhao2026probmoe,
+title={ProbMoE: Differentiable Probabilistic Routing for Mixture-of-Experts},
+author={Heng Zhao and Zilei Shao and Guy Van den Broeck and Zhe Zeng},
+booktitle={Forty-third International Conference on Machine Learning},
+year={2026},
+url={https://openreview.net/forum?id=7zOtnPt85B}
+}</code></pre>
+  <p class="citation-status" id="citationStatus" role="status" aria-live="polite"></p>
+</section>
+
 <footer>
   <p>Companion walkthrough for <a href="https://openreview.net/forum?id=7zOtnPt85B">ProbMoE: Differentiable Probabilistic Routing for Mixture-of-Experts</a>, ICML 2026. The efficient compiled-circuit implementation is described in Appendix H. Walkthrough figures use a four-expert, top-two example small enough to verify by exhaustive enumeration. <a href="https://github.com/HengHugoZhao/ProbMoE">View the code.</a></p>
 </footer>
@@ -1227,6 +1259,46 @@ router_weights = torch.gather(w_full, 1, selected_experts)</code></pre>
     root.dataset.theme = next;
     localStorage.setItem("probmoe-theme", next);
     syncThemeToggle();
+  });
+
+  const citationCopy = document.getElementById("citationCopy");
+  const citationText = document.getElementById("citationText");
+  const citationStatus = document.getElementById("citationStatus");
+  let citationResetTimer;
+
+  const fallbackCopy = (text) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) throw new Error("Copy command failed");
+  };
+
+  citationCopy.addEventListener("click", async () => {
+    const bibtex = citationText.textContent.trim();
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(bibtex);
+      } else {
+        fallbackCopy(bibtex);
+      }
+      citationCopy.textContent = "Copied";
+      citationStatus.textContent = "Citation copied to clipboard.";
+    } catch {
+      citationCopy.textContent = "Copy failed";
+      citationStatus.textContent = "Select the BibTeX text and copy it manually.";
+    }
+
+    clearTimeout(citationResetTimer);
+    citationResetTimer = setTimeout(() => {
+      citationCopy.textContent = "Copy BibTeX";
+      citationStatus.textContent = "";
+    }, 2200);
   });
 </script>
 </body>
