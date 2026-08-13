@@ -1129,11 +1129,6 @@ loss       = 0.342857
                                     ─────────────────────────────────────────
 sum                                 = [ 0.275191, -0.213559, -0.044267, -0.017365]
 autograd  dL/dθ                     = [ 0.275191, -0.213559, -0.044267, -0.017365]</code></pre>
-  <div class="callout warn">
-    <span class="label">The subtle part — log(1−p) must stay connected</span>
-    <p>When the circuit <em>computes</em> μ, the complement weights log(1−p) are held constant — that is the paper’s inner derivative, and the downward flow pass performs it structurally. But θ reaches the distribution through <strong>both</strong> log p and log(1−p), so the <em>outer</em> derivative ∂μ/∂θ needs both edges live.</p>
-    <p>Detaching the complement leaves the marginal <strong>values bit-identical</strong> — which is why the bug hides in plain sight — while silently multiplying the Jacobian by σ(−θ) column-wise. Measured on this example, the corrupted Jacobian differs from the true covariance by <span class="mono">0.14</span>, and gradients start depending on a constant offset added to all logits, which provably cannot change the distribution.</p>
-  </div>
 </section>
 
 <section class="stage" id="s6">
