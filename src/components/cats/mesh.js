@@ -222,7 +222,8 @@ export function buildMesh(image, rig, cell = 10) {
     const influence = new Map();
     parts.forEach((part, i) => {
       if (i === 0) return;
-      const mine = own.has(i);
+      // a part without an outline of its own (a paw) works inside its parent
+      const mine = own.has(i) || (!part.poly && !part.chain && own.has(parentOf[i]));
       const nearParent = own.has(parentOf[i]);
       if (!mine && !nearParent) return;
       const r = part.blend ?? 14;

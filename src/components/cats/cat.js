@@ -10,12 +10,13 @@ const ease = (t) => t * t * (3 - 2 * t);
 const TAU = Math.PI * 2;
 
 // Footfall timing per gait: fraction of the cycle a paw is on the ground,
-// stride (body lengths per cycle), paw lift (fraction of hip height) and the
-// phase offset of each leg.
+// stride (body lengths per cycle), paw lift (fraction of hip height), how far
+// the paw folds back at the wrist mid-swing (degrees) and the phase offset of
+// each leg.
 const GAITS = {
-  walk: { duty: 0.6, stride: 0.3, lift: 0.13, offsets: { hindNear: 0, foreNear: 0.25, hindFar: 0.5, foreFar: 0.75 } },
-  trot: { duty: 0.45, stride: 0.5, lift: 0.18, offsets: { hindNear: 0, foreFar: 0.02, hindFar: 0.5, foreNear: 0.52 } },
-  gallop: { duty: 0.36, stride: 0.85, lift: 0.24, offsets: { hindFar: 0, hindNear: 0.1, foreNear: 0.5, foreFar: 0.62 } },
+  walk: { duty: 0.6, stride: 0.3, lift: 0.13, fold: 70, offsets: { hindNear: 0, foreNear: 0.25, hindFar: 0.5, foreFar: 0.75 } },
+  trot: { duty: 0.45, stride: 0.5, lift: 0.18, fold: 80, offsets: { hindNear: 0, foreFar: 0.02, hindFar: 0.5, foreNear: 0.52 } },
+  gallop: { duty: 0.36, stride: 0.85, lift: 0.24, fold: 85, offsets: { hindFar: 0, hindNear: 0.1, foreNear: 0.5, foreFar: 0.62 } },
 };
 
 // Tail moods as offsets from the drawing (degrees; positive raises it).
@@ -70,11 +71,12 @@ export class Cat {
     this.gait = "walk"; this.gaitSince = 0;
     this.stride = 0; // 0 standing .. 1 full strides
     this.sag = { hind: 0, fore: 0 };
-    const side = assets.meshes.side.parts.filter((part) => part.kind === "leg");
-    this.legs = side.map((part) => ({
-      part, rest: Math.atan2(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]) / DEG,
+    const sideParts = assets.meshes.side.parts;
+    this.legs = sideParts.filter((part) => part.kind === "leg").map((part) => ({
+      part, paw: sideParts.find((p) => p.kind === "paw" && p.parent === part.name),
+      rest: Math.atan2(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]) / DEG,
       length: Math.hypot(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]),
-      angle: null, lift: 0,
+      angle: null, lift: 0, fold: 0,
     }));
     const hipX = (role) => this.legs.find((leg) => leg.part.role === role).part.joint[0];
     this.span = Math.max(Math.abs(hipX("foreNear") - hipX("hindNear")), 40); // hips to shoulders, sprite px
@@ -143,7 +145,7 @@ export class Cat {
     this.setPosture(name);
     const target = POSTURES[SIDE_ALIASES[name] || name];
     if (target) this.post = { ...target };
-    this.legs.forEach((leg) => { leg.angle = null; leg.lift = 0; });
+    this.legs.forEach((leg) => { leg.angle = null; leg.lift = 0; leg.fold = 0; });
   }
   get pose() {
     if (this.mode === "held" || this.mode === "cling" || this.mode === "climb" || this.mode === "air") return this.mode;
@@ -526,7 +528,7 @@ export class Cat {
       const c = Math.sign(leg.rest || 1) * Math.max(0, reach - sweep / 2);
       const centre = Math.atan2(c, h);
       const q = (this.phase + (gait.offsets[part.role] ?? 0)) % 1;
-      let px; let lift = 0;
+      let px; let lift = 0; let fold = 0;
       if (q < stance) {
         px = c + sweep * (0.5 - q / stance);
         // a straight leg reaching out lowers the body over it a little
@@ -535,12 +537,15 @@ export class Cat {
         const s = h * (1 - Math.cos(dev));
         sag[end] = sag[end] == null ? s : Math.min(sag[end], s);
       } else {
-        // the paw peels off, swings forward and sets down with no skid
+        // the paw peels off, swings forward over its next spot, then sets
+        // straight down there (no skid)
         const s = (q - stance) / (1 - stance);
-        px = c - sweep / 2 + strideLen * (ease(s) - (1 - stance) * s);
+        px = c - sweep / 2 + strideLen * (ease(Math.min(s / 0.8, 1)) - (1 - stance) * s);
         lift = Math.sin(Math.PI * s) * gait.lift * h;
+        // the paw curls back early and has opened out again before it lands
+        fold = Math.sin(Math.PI * Math.min(s / 0.7, 1)) * gait.fold;
       }
-      return { x: hip[0] + px, lift };
+      return { x: hip[0] + px, lift, fold };
     });
     if (this.gait !== "gallop") {
       // gait bob and pitch follow the legs: low as they reach, high over them
@@ -560,26 +565,37 @@ export class Cat {
       const h = def.ground - hip[1];
       let angle;
       let lift;
+      let fold = 0;
       if (grounded) {
         const reach = post.reach ? (fore ? post.reach.fore : post.reach.hind) : 0;
         const paw = paws[i];
-        lift = paw.lift * this.stride;
+        // a lifted paw mostly folds at the wrist; the leg itself bends only a
+        // little, so it never looks stubby
+        lift = paw.lift * 0.5 * this.stride;
+        fold = paw.fold * this.stride;
         angle = lerp(leg.rest + reach, Math.atan2(paw.x - hip[0], h - lift) / DEG, this.stride);
       } else {
-        // a hop: tuck up a little
+        // a hop: tuck the paws up
         angle = leg.rest + (fore ? 6 : -6);
-        lift = 14;
+        lift = 6;
+        fold = 40;
       }
-      if (fore && fx.knead > 0.01) lift += Math.max(0, Math.sin(t * TAU * 1.7 + (part.role === "foreFar" ? Math.PI : 0))) * 16 * fx.knead;
-      if (part.role === "foreFar" && fx.swat > 0.01) { angle += 38 * fx.swat; lift += 24 * fx.swat; }
+      if (fore && fx.knead > 0.01) {
+        const press = Math.max(0, Math.sin(t * TAU * 1.7 + (part.role === "foreFar" ? Math.PI : 0))) * fx.knead;
+        lift += 6 * press;
+        fold += 45 * press;
+      }
+      if (part.role === "foreFar" && fx.swat > 0.01) { angle += 38 * fx.swat; lift += 14 * fx.swat; fold += 30 * fx.swat; }
       const rate = walking ? (blending ? 16 : 60) : 12;
       leg.angle = leg.angle == null ? angle : smooth(leg.angle, angle, rate, dt);
       leg.lift = smooth(leg.lift, lift, walking ? 60 : 30, dt);
+      leg.fold = smooth(leg.fold, fold, walking ? 60 : 20, dt);
       // stretch or fold the leg just enough for the paw to meet the floor
       const reachDown = (h - leg.lift) / Math.max(Math.cos(leg.angle * DEG), 0.3);
       const k = clamp(reachDown / leg.length, grounded ? 0.78 : 0.82, 1.06);
       // the leg hangs from the body, so undo the body's tilt
       pose[part.name] = { rot: -(leg.angle + tilt - leg.rest) * DEG, k };
+      if (leg.paw) pose[leg.paw.name] = { rot: leg.fold * DEG };
     });
 
     // head: posture, looking at things, sniffing, licking, shaking
