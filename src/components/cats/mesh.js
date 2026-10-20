@@ -352,9 +352,11 @@ export function boneMatrices(mesh, pose) {
   const world = {};
   const resolve = (part) => {
     if (world[part.name]) return world[part.name];
+    const q = pose[part.name] || {};
+    // a bone can also be placed directly (e.g. a paw set flat on the floor)
+    if (q.world) { world[part.name] = q.world; return q.world; }
     const parent = part.parent ? mesh.parts.find((p) => p.name === part.parent) : part.name === "body" ? null : mesh.parts[0];
     const base = parent ? resolve(parent) : pose.root || mat.identity();
-    const q = pose[part.name] || {};
     let local;
     if (part.name === "body") {
       local = mat.mul(mat.translate(q.dx || 0, q.dy || 0), mat.about(q.pivot || [0, 0], q.rot || 0, q.k || 1, [0, 1], q.w || 1));

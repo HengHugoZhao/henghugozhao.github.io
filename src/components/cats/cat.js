@@ -7,17 +7,23 @@ export const rand = (min, max) => min + Math.random() * (max - min);
 export const chance = (p) => Math.random() < p;
 const smooth = (current, target, rate, dt) => current + (target - current) * (1 - Math.exp(-rate * dt));
 const ease = (t) => t * t * (3 - 2 * t);
+const smoothstep = (a, b, x) => ease(clamp((x - a) / (b - a), 0, 1));
 const TAU = Math.PI * 2;
 
 // Footfall timing per gait: fraction of the cycle a paw is on the ground,
-// stride (body lengths per cycle), paw lift (fraction of hip height), how far
-// the paw folds back at the wrist mid-swing (degrees) and the phase offset of
-// each leg.
+// stride (body lengths per cycle), paw lift (fraction of hip height), how
+// much the paws flex (scale) and the phase offset of each leg.
 const GAITS = {
-  walk: { duty: 0.6, stride: 0.3, lift: 0.13, fold: 70, offsets: { hindNear: 0, foreNear: 0.25, hindFar: 0.5, foreFar: 0.75 } },
-  trot: { duty: 0.45, stride: 0.5, lift: 0.18, fold: 80, offsets: { hindNear: 0, foreFar: 0.02, hindFar: 0.5, foreNear: 0.52 } },
-  gallop: { duty: 0.36, stride: 0.85, lift: 0.24, fold: 85, offsets: { hindFar: 0, hindNear: 0.1, foreNear: 0.5, foreFar: 0.62 } },
+  walk: { duty: 0.6, stride: 0.3, lift: 0.13, flex: 1, offsets: { hindNear: 0, foreNear: 0.25, hindFar: 0.5, foreFar: 0.75 } },
+  trot: { duty: 0.45, stride: 0.5, lift: 0.18, flex: 1.15, offsets: { hindNear: 0, foreFar: 0.02, hindFar: 0.5, foreNear: 0.52 } },
+  gallop: { duty: 0.36, stride: 0.72, lift: 0.24, flex: 1.1, offsets: { hindFar: 0, hindNear: 0.1, foreNear: 0.5, foreFar: 0.62 } },
 };
+
+// In a step the paw first trails back as it peels off the floor (curl), then
+// points forward as the leg reaches out to land (reach). Degrees at the wrist
+// (front) or hock (back); the back feet flex less.
+const PAW_FLEX = { fore: { curl: 45, reach: 18 }, hind: { curl: 30, reach: 12 } };
+const bump = (s, from, to) => (s > from && s < to ? Math.sin((Math.PI * (s - from)) / (to - from)) : 0);
 
 // Tail moods as offsets from the drawing (degrees; positive raises it).
 const TAIL_MOODS = {
@@ -72,12 +78,25 @@ export class Cat {
     this.stride = 0; // 0 standing .. 1 full strides
     this.sag = { hind: 0, fore: 0 };
     const sideParts = assets.meshes.side.parts;
-    this.legs = sideParts.filter((part) => part.kind === "leg").map((part) => ({
-      part, paw: sideParts.find((p) => p.kind === "paw" && p.parent === part.name),
-      rest: Math.atan2(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]) / DEG,
-      length: Math.hypot(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]),
-      angle: null, lift: 0, fold: 0,
-    }));
+    this.legs = sideParts.filter((part) => part.kind === "leg").map((part) => {
+      const paw = sideParts.find((p) => p.kind === "paw" && p.parent === part.name);
+      const rest = Math.atan2(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]) / DEG;
+      const length = Math.hypot(part.axis[0] - part.joint[0], part.axis[1] - part.joint[1]);
+      const contact = part.ground ?? part.axis[1]; // where the paw meets the floor
+      const drop = contact - part.joint[1]; // drawn hip height above it
+      return {
+        part, paw, rest, length, contact, drop,
+        unit: [(part.axis[0] - part.joint[0]) / length, (part.axis[1] - part.joint[1]) / length],
+        // standing, a leg keeps its drawn angle, unless it is drawn lifted:
+        // then it tips toward upright until the paw reaches the floor
+        stand: length * Math.cos(rest * DEG) >= drop - 0.5 ? rest : (Math.sign(rest) * Math.acos(Math.min(drop / length, 1))) / DEG,
+        // hip to wrist, and wrist to the bottom of the paw
+        upper: Math.hypot(paw.joint[0] - part.joint[0], paw.joint[1] - part.joint[1]),
+        lower: Math.hypot(part.axis[0] - paw.joint[0], part.axis[1] - paw.joint[1]),
+        flat: rest + (paw.flat || 0), // paw angle that sits flat on the floor
+        angle: null, k: null, fold: 0,
+      };
+    });
     const hipX = (role) => this.legs.find((leg) => leg.part.role === role).part.joint[0];
     this.span = Math.max(Math.abs(hipX("foreNear") - hipX("hindNear")), 40); // hips to shoulders, sprite px
     this.look = null;
@@ -145,7 +164,7 @@ export class Cat {
     this.setPosture(name);
     const target = POSTURES[SIDE_ALIASES[name] || name];
     if (target) this.post = { ...target };
-    this.legs.forEach((leg) => { leg.angle = null; leg.lift = 0; leg.fold = 0; });
+    this.legs.forEach((leg) => { leg.angle = null; leg.k = null; leg.fold = 0; });
   }
   get pose() {
     if (this.mode === "held" || this.mode === "cling" || this.mode === "climb" || this.mode === "air") return this.mode;
@@ -521,16 +540,17 @@ export class Cat {
     const paws = this.legs.map((leg) => {
       const part = leg.part;
       const hip = mat.apply(bodyM, part.joint[0], part.joint[1]);
-      const h = def.ground - hip[1];
+      const h = leg.contact - hip[1];
       // centre the stride where the paw reaches both ends without the leg
       // stretching; at the near end it folds a little instead
       const reach = Math.sqrt(Math.max(0, (1.03 * leg.length) ** 2 - h * h));
       const c = Math.sign(leg.rest || 1) * Math.max(0, reach - sweep / 2);
       const centre = Math.atan2(c, h);
       const q = (this.phase + (gait.offsets[part.role] ?? 0)) % 1;
-      let px; let lift = 0; let fold = 0;
+      let px; let lift = 0; let fold = 0; let planted = null; let swing = null;
       if (q < stance) {
-        px = c + sweep * (0.5 - q / stance);
+        planted = q / stance;
+        px = c + sweep * (0.5 - planted);
         // a straight leg reaching out lowers the body over it a little
         const dev = Math.atan2(px, h) - centre;
         const end = part.role.startsWith("fore") ? "fore" : "hind";
@@ -540,12 +560,13 @@ export class Cat {
         // the paw peels off, swings forward over its next spot, then sets
         // straight down there (no skid)
         const s = (q - stance) / (1 - stance);
+        swing = s;
         px = c - sweep / 2 + strideLen * (ease(Math.min(s / 0.8, 1)) - (1 - stance) * s);
         lift = Math.sin(Math.PI * s) * gait.lift * h;
-        // the paw curls back early and has opened out again before it lands
-        fold = Math.sin(Math.PI * Math.min(s / 0.7, 1)) * gait.fold;
+        const flex = PAW_FLEX[part.role.startsWith("fore") ? "fore" : "hind"];
+        fold = (flex.curl * bump(s, 0, 0.5) - flex.reach * bump(s, 0.45, 0.95)) * gait.flex;
       }
-      return { x: hip[0] + px, lift, fold };
+      return { x: hip[0] + px, lift, fold, planted, swing };
     });
     if (this.gait !== "gallop") {
       // gait bob and pitch follow the legs: low as they reach, high over them
@@ -556,46 +577,77 @@ export class Cat {
     }
     const pose = { body: { dy: drop, rot: tilt * DEG, pivot } };
 
-    // pass 2: aim each leg at its paw, keeping it on the floor
+    // pass 2: aim each leg at its paw. Each leg bends at the wrist (or hock):
+    // a paw on the floor lies flat while the leg pivots over it.
     const blending = t - this.gaitSince < 0.3;
     this.legs.forEach((leg, i) => {
       const part = leg.part;
       const fore = part.role.startsWith("fore");
       const hip = mat.apply(bodyM, part.joint[0], part.joint[1]);
-      const h = def.ground - hip[1];
+      const h = leg.contact - hip[1];
       let angle;
-      let lift;
-      let fold = 0;
+      let fold;
+      let k;
       if (grounded) {
+        // standing: the paw stays where it is drawn, flat (it moves only for a
+        // stretch), whatever the body does above it
         const reach = post.reach ? (fore ? post.reach.fore : post.reach.hind) : 0;
-        const paw = paws[i];
-        // a lifted paw mostly folds at the wrist; the leg itself bends only a
-        // little, so it never looks stubby
-        lift = paw.lift * 0.5 * this.stride;
-        fold = paw.fold * this.stride;
-        angle = lerp(leg.rest + reach, Math.atan2(paw.x - hip[0], h - lift) / DEG, this.stride);
+        let footX = hip[0] + leg.drop * Math.tan((leg.stand + reach) * DEG);
+        let footY = leg.contact;
+        let pawAngle = leg.flat;
+        if (fore && fx.knead > 0.01) {
+          const press = Math.max(0, Math.sin(t * TAU * 1.7 + (part.role === "foreFar" ? Math.PI : 0))) * fx.knead;
+          footY -= 6 * press;
+          pawAngle -= 45 * press;
+        }
+        if (this.stride > 0.001) {
+          // walking: planted, the paw lies flat and peels off at the end;
+          // swinging, it curls back, reaches, and levels out to land
+          const paw = paws[i];
+          const y = leg.contact - paw.lift * 0.6;
+          const straight = Math.atan2(paw.x - hip[0], y - hip[1]) / DEG;
+          const swingAngle = paw.planted != null
+            ? lerp(leg.flat, straight, smoothstep(0.55, 1, paw.planted))
+            : lerp(straight - paw.fold, leg.flat, smoothstep(0.7, 1, paw.swing));
+          footX = lerp(footX, paw.x, this.stride);
+          footY = lerp(footY, y, this.stride);
+          pawAngle = lerp(pawAngle, swingAngle, this.stride);
+        }
+        // two bones: the wrist (or hock) sits where the paw, at its angle,
+        // ends on its spot, and the leg above it reaches the wrist
+        const wx = footX - leg.lower * Math.sin(pawAngle * DEG);
+        const wy = footY - leg.lower * Math.cos(pawAngle * DEG);
+        angle = Math.atan2(wx - hip[0], wy - hip[1]) / DEG;
+        k = Math.hypot(wx - hip[0], wy - hip[1]) / leg.upper;
+        if (k < 0.68) {
+          // folded as far as it goes: tip the leg instead, so the paw never
+          // sinks into the floor
+          k = 0.68;
+          angle = (Math.sign(angle || leg.rest || 1) * Math.acos(clamp((wy - hip[1]) / (k * leg.upper), -1, 1))) / DEG;
+        }
+        fold = angle - pawAngle;
+        if (part.role === "foreFar" && fx.swat > 0.01) { angle += 38 * fx.swat; fold += 30 * fx.swat; k -= 0.12 * fx.swat; }
       } else {
-        // a hop: tuck the paws up
+        // a hop tucks the paws up
         angle = leg.rest + (fore ? 6 : -6);
-        lift = 6;
         fold = 40;
+        k = (h - 6) / (leg.length * Math.max(Math.cos(angle * DEG), 0.3));
       }
-      if (fore && fx.knead > 0.01) {
-        const press = Math.max(0, Math.sin(t * TAU * 1.7 + (part.role === "foreFar" ? Math.PI : 0))) * fx.knead;
-        lift += 6 * press;
-        fold += 45 * press;
-      }
-      if (part.role === "foreFar" && fx.swat > 0.01) { angle += 38 * fx.swat; lift += 14 * fx.swat; fold += 30 * fx.swat; }
-      const rate = walking ? (blending ? 16 : 60) : 12;
-      leg.angle = leg.angle == null ? angle : smooth(leg.angle, angle, rate, dt);
-      leg.lift = smooth(leg.lift, lift, walking ? 60 : 30, dt);
-      leg.fold = smooth(leg.fold, fold, walking ? 60 : 20, dt);
-      // stretch or fold the leg just enough for the paw to meet the floor
-      const reachDown = (h - leg.lift) / Math.max(Math.cos(leg.angle * DEG), 0.3);
-      const k = clamp(reachDown / leg.length, grounded ? 0.78 : 0.82, 1.06);
+      // a steady walk follows its targets exactly (smoothing would make the
+      // paws slip); starts, stops and gait changes ease in
+      const steady = walking && !blending;
+      leg.angle = leg.angle == null || steady ? angle : smooth(leg.angle, angle, walking ? 16 : 12, dt);
+      leg.fold = steady ? fold : smooth(leg.fold, fold, walking ? 16 : 20, dt);
+      leg.k = leg.k == null || steady ? k : smooth(leg.k, k, walking ? 16 : 30, dt);
+      const legK = clamp(leg.k, 0.68, 1.08);
       // the leg hangs from the body, so undo the body's tilt
-      pose[part.name] = { rot: -(leg.angle + tilt - leg.rest) * DEG, k };
-      if (leg.paw) pose[leg.paw.name] = { rot: leg.fold * DEG };
+      const rot = -(leg.angle + tilt - leg.rest) * DEG;
+      pose[part.name] = { rot, k: legK };
+      // the paw is placed rigidly at the wrist, at its own angle, so it keeps
+      // its drawn size however the leg above it bends
+      const wrist = mat.apply(mat.mul(bodyM, mat.about(part.joint, rot, legK, leg.unit)), leg.paw.joint[0], leg.paw.joint[1]);
+      const turn = (leg.rest - (leg.angle - leg.fold)) * DEG;
+      pose[leg.paw.name] = { world: mat.mul(mat.mul(mat.translate(wrist[0], wrist[1]), mat.rotate(turn)), mat.translate(-leg.paw.joint[0], -leg.paw.joint[1])) };
     });
 
     // head: posture, looking at things, sniffing, licking, shaking

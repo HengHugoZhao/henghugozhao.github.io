@@ -19,16 +19,18 @@ const spriteSet = (id) => ({
   fall: `${dir}/${id}-fall.webp`,
 });
 
-// A leg and its paw. The paw folds back at the wrist (front) or hock (back)
-// while the leg swings forward, the way a cat lifts its feet.
-const leg = (name, role, poly, joint, foot, z) => {
+// A leg and its paw, which bends at the wrist (front) or hock (back). The paw
+// touches the floor at the height it is drawn (far paws sit a little higher).
+// For a paw drawn in the air: `flat` turns it (degrees) to sit flat and
+// `ground` is where it would touch down.
+const leg = (name, role, poly, joint, foot, z, { flat = 0, ground = foot[1] } = {}) => {
   const at = role.startsWith("fore") ? 0.72 : 0.64; // wrist / hock, hip-to-foot
   const wrist = [joint[0] + (foot[0] - joint[0]) * at, joint[1] + (foot[1] - joint[1]) * at];
   const l = Math.hypot(foot[0] - joint[0], foot[1] - joint[1]);
   const [nx, ny] = [-(foot[1] - joint[1]) / l, (foot[0] - joint[0]) / l];
   return [
-    { name, role, kind: "leg", poly, joint, axis: foot, z, blend: 18, priority: 1 },
-    { name: `${name}Paw`, kind: "paw", parent: name, base: [[wrist[0] - nx * 40, wrist[1] - ny * 40], [wrist[0] + nx * 40, wrist[1] + ny * 40]], joint: wrist, axis: foot, falloff: [-4, 6], z },
+    { name, role, kind: "leg", poly, joint, axis: foot, ground, z, blend: 18, priority: 1 },
+    { name: `${name}Paw`, kind: "paw", parent: name, base: [[wrist[0] - nx * 40, wrist[1] - ny * 40], [wrist[0] + nx * 40, wrist[1] + ny * 40]], joint: wrist, axis: foot, falloff: [-4, 6], flat, z },
   ];
 };
 
@@ -60,7 +62,7 @@ export const CAT_DEFS = [
           lift: { center: [148, 143], radius: [84, 72], move: [-9, -17] },
           parts: [
             ...leg("legA", "hindFar", [[124, 172], [126, 190], [130, 206], [138, 220], [150, 233], [166, 244], [150, 256], [120, 290], [110, 322], [42, 322], [38, 260]], [150, 205], [88, 309], 10),
-            ...leg("legD", "foreFar", [[350, 246], [356, 256], [372, 266], [392, 270], [420, 304], [462, 304], [458, 270], [440, 250], [415, 222], [402, 204]], [370, 217], [440, 300], 12),
+            ...leg("legD", "foreFar", [[350, 246], [356, 256], [372, 266], [392, 270], [420, 304], [462, 304], [458, 270], [440, 250], [415, 222], [402, 204]], [370, 217], [440, 300], 12, { flat: -20, ground: 309 }),
             { name: "tail", poly: [[154, 138], [128, 175], [118, 183], [0, 93], [0, 0], [80, 0], [136, 96], [152, 124], [156, 132]], chain: [[150, 152], [118, 120], [86, 88], [55, 57], [24, 24]], z: 20, blend: 16, priority: 1 },
             ...leg("legB", "hindNear", [[160, 243], [156, 250], [168, 285], [188, 322], [254, 322], [250, 296], [222, 270], [216, 248], [232, 234], [229, 229]], [194, 226], [222, 315], 60),
             ...leg("legC", "foreNear", [[276, 234], [272, 245], [300, 280], [325, 324], [392, 324], [385, 300], [366, 280], [356, 260], [350, 246]], [314, 228], [362, 318], 62),
