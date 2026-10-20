@@ -1,4 +1,5 @@
 import CatPlayground from "../components/CatPlayground";
+import CatTree from "../components/CatTree";
 
 export default function Miscellanea() {
   return (
@@ -20,6 +21,7 @@ export default function Miscellanea() {
           <img src="/Ono.jpg" alt="Ono, a Siamese kitten" className="cat-photo" />
           <figcaption className="cat-caption">ONO 🐾</figcaption>
         </figure>
+        <CatTree />
       </div>
     </section>
   );

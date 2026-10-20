@@ -296,9 +296,16 @@ function* wakeUp(cat, engine) {
 export function* nap(cat, engine) {
   const world = engine.world;
   const other = engine.otherCat(cat);
-  // Prefer to sleep near the other cat if it is napping, or somewhere visible.
+  // The cushions on the cat tree make the best beds (the higher the better);
+  // otherwise sleep near the other cat if it is napping, or somewhere visible.
+  const pads = world.platforms.filter((p) => p.kind === "pad" && !p.gone && other?.platform !== p && (p === cat.platform || world.route(cat, cat.platform, p)));
   let spot = null;
-  if (other && other.pose === "sleep" && other.platform && chance(0.7)) {
+  if (pads.length && chance(0.75)) {
+    const weights = pads.map((p) => 1 + (world.floor.y - p.y) / Math.max(world.floor.y, 1));
+    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+    const pad = pads.find((_, i) => (roll -= weights[i]) <= 0) || pads[0];
+    spot = { platform: pad, x: (pad.left + pad.right) / 2 + rand(-0.1, 0.1) * (pad.right - pad.left) };
+  } else if (other && other.pose === "sleep" && other.platform && other.platform.kind !== "pad" && chance(0.7)) {
     spot = { platform: other.platform, x: other.x + (chance(0.5) ? -1 : 1) * (other.bodyLen * 0.55 + cat.bodyLen * 0.55) };
   } else if (chance(0.45)) {
     spot = world.pickSpot(cat, { visible: true, cozy: true });

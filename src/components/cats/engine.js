@@ -57,10 +57,24 @@ class World {
       seen.add(element);
       cards.push(platform);
     });
+    // the cushions on the cat tree: small one-way perches
+    const pads = [];
+    this.page.querySelectorAll(".cat-tree__pad").forEach((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 20) return; // the tree is hidden on small screens
+      let platform = this.byElement.get(element);
+      if (!platform) {
+        platform = { id: `pad-${this.byElement.size}`, kind: "pad", el: element, owner: null };
+        this.byElement.set(element, platform);
+      }
+      Object.assign(platform, { left: rect.left - areaRect.left, right: rect.right - areaRect.left, y: rect.top - areaRect.top, gone: false });
+      seen.add(element);
+      pads.push(platform);
+    });
     this.byElement.forEach((platform, element) => {
       if (!seen.has(element)) { platform.gone = true; this.byElement.delete(element); }
     });
-    this.platforms = [this.floor, ...cards];
+    this.platforms = [this.floor, ...cards, ...pads];
     this.updateView();
   }
 
@@ -128,8 +142,11 @@ class World {
       if (to === from || to.gone) return;
       const rise = from.y - to.y;
       const overlap = Math.min(from.right, to.right) - Math.max(from.left, to.left);
+      const gap = Math.max(to.left - from.right, from.left - to.right, 0);
       if (rise > cat.standH * 0.4) {
-        if (rise <= this.maxJump(cat) && overlap > margin) out.push({ type: "jump", from, to });
+        const tree = from.kind === "pad" || to.kind === "pad";
+        if (rise <= this.maxJump(cat) && overlap > margin && this.clearRise(cat, from, to) !== null) out.push({ type: "jump", from, to });
+        else if (tree && rise <= this.maxJump(cat) && overlap <= margin && gap < cat.bodyLen * 1.6) out.push({ type: "jump", from, to });
         else if (cat.p.climber && overlap > -cat.bodyLen && to.walls) {
           const wall = to.walls
             .filter((w) => w.x > from.left + cat.bodyLen && w.x < from.right - cat.bodyLen && from.y - w.bottom < this.maxJump(cat) && w.bottom <= from.y)
@@ -146,7 +163,6 @@ class World {
         const rightLand = from.right + cat.bodyLen * 0.9;
         const canLeft = to.left < leftLand - cat.bodyLen * 0.2 || (rise < 0 && to.left < from.left - cat.bodyLen * 0.6);
         const canRight = to.right > rightLand + cat.bodyLen * 0.2 || (rise < 0 && to.right > from.right + cat.bodyLen * 0.6);
-        const gap = Math.max(to.left - from.right, from.left - to.right, 0);
         if ((canLeft || canRight) && gap < cat.bodyLen * 3) out.push({ type: "jump", from, to });
       }
     });
@@ -165,13 +181,27 @@ class World {
     return samples.find((x) => !blocked(x)) ?? null;
   }
 
+  // Where a cat can jump straight up from `from` to `to` without passing
+  // through a cushion of the cat tree on the way.
+  clearRise(cat, from, to, prefer = cat.x) {
+    const margin = cat.bodyLen * 0.45;
+    const lo = Math.max(from.left, to.left) + margin;
+    const hi = Math.min(from.right, to.right) - margin;
+    if (hi < lo) return null;
+    const blocked = (x) => this.platforms.some((p) => !p.gone && p.kind === "pad" && p !== from && p !== to && p.y < from.y && p.y > to.y && x > p.left - cat.bodyLen * 0.5 && x < p.right + cat.bodyLen * 0.5);
+    const samples = [];
+    for (let i = 0; i <= 8; i += 1) samples.push(lo + ((hi - lo) * i) / 8);
+    samples.sort((a, b) => Math.abs(a - prefer) - Math.abs(b - prefer));
+    return samples.find((x) => !blocked(x)) ?? null;
+  }
+
   route(cat, from, to) {
     if (!from || !to || to.gone) return null;
     const queue = [[from, []]];
     const visited = new Set([from]);
     while (queue.length) {
       const [node, path] = queue.shift();
-      if (path.length > 3) continue;
+      if (path.length > 5) continue; // up the cat tree pad by pad
       for (const link of this.links(cat, node)) {
         if (visited.has(link.to)) continue;
         const next = [...path, link];
@@ -201,8 +231,17 @@ class World {
       }
       const lo = Math.max(from.left, to.left) + margin;
       const hi = Math.min(from.right, to.right) - margin;
+      if (hi < lo) {
+        // up and across a gap (pad to pad on the cat tree): edge to edge
+        const right = to.left + to.right > from.left + from.right;
+        return {
+          from, to,
+          landX: inside(to, right ? to.left : to.right),
+          takeoffX: inside(from, right ? from.right : from.left),
+        };
+      }
       const want = preferX ?? cat.x;
-      const landX = clamp(want, lo, Math.max(lo, hi));
+      const landX = this.clearRise(cat, from, to, want) ?? clamp(want, lo, Math.max(lo, hi));
       const run = clamp(rise * 0.12, cat.bodyLen * 0.25, cat.bodyLen * 0.9);
       const dir = cat.x <= landX ? 1 : -1;
       return { from, to, landX, takeoffX: inside(from, landX - dir * run) };
@@ -257,6 +296,11 @@ class World {
       let weight = 1;
       if (options.visible && this.platformVisible(platform)) weight *= 3;
       if (platform.kind === "card") weight *= cat.p.climber ? 1.2 : 1.5;
+      if (platform.kind === "pad") {
+        const other = cat.engine.otherCat(cat);
+        if (options.cozy && other && other.platform === platform) return;
+        weight *= options.cozy ? 6 : 2;
+      }
       if (options.high || cat.p.bold > 0.65) weight *= 1 + (this.floor.y - platform.y) / Math.max(this.floor.y, 1);
       if (platform.owner === cat.id) weight *= 1.6;
       if (options.cozy && platform.kind === "floor") weight *= 0.7;
@@ -282,7 +326,7 @@ class World {
 
   nearEdge(cat) {
     const platform = cat.platform;
-    if (!platform || platform.kind !== "card") return false;
+    if (!platform || (platform.kind !== "card" && platform.kind !== "pad")) return false;
     return cat.x - platform.left < cat.bodyLen * 1.4 || platform.right - cat.x < cat.bodyLen * 1.4;
   }
 }
@@ -562,6 +606,7 @@ export function createCatPlayground({ page, area, ballElement, button, status, c
     ball.vy = clamp(pointer.vy * 0.9, -1100, 700) - 120;
     ball.platform = null;
     ball.throwFrom = { x: pointer.x, y: pointer.y };
+    ball.expiresAt = clock + 30; // a thrown ball is tidied away after 30 s
     // the keenest awake cat goes for it
     const scored = engine.cats
       .filter((cat) => cat.mode === "ground" && cat.pose !== "sleep" && cat.taskPriority < 5 && cat.needs.energy > 0.12)
@@ -670,6 +715,14 @@ export function createCatPlayground({ page, area, ballElement, button, status, c
   // --- ball physics -------------------------------------------------------------------
   const updateBall = (dt) => {
     const r = ball.r;
+    if (ball.mode !== "hidden" && ball.mode !== "cursor" && clock > (ball.expiresAt ?? Infinity)) {
+      if (ball.owner) engine.dropBall(ball.owner);
+      ball.chaser = null;
+      ball.platform = null;
+      ball.expiresAt = null;
+      setBallMode("hidden");
+      return;
+    }
     if (ball.mode === "cursor") {
       const px = ball.x;
       ball.x = pointer.x ?? ball.x;

@@ -266,6 +266,7 @@ a:hover { text-decoration: underline; }
   isolation: isolate;
   min-height: calc(100vh - 150px);
   padding-bottom: 5.5rem;
+  grid-template-rows: auto auto 1fr; /* spare height goes to the gallery, so the tree reaches the floor */
 }
 .miscellanea-page > h1,
 .miscellanea-page > .misc-intro,
@@ -448,16 +449,34 @@ a:hover { text-decoration: underline; }
   opacity: 0;
   pointer-events: none;
 }
-.cat-ball[data-visible="true"] { opacity: 1; }
+.cat-ball { transition: opacity 0.6s ease; }
+.cat-ball[data-visible="true"] { opacity: 1; transition-duration: 0.15s; }
 .cat-ball--hit { animation: ball-hit 280ms ease-out; }
 .cat-ball-cursor { cursor: crosshair; }
 .cat-gallery {
+  --tree-width: clamp(150px, 22vw, 230px);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 300px));
+  grid-template-columns: repeat(2, minmax(0, 300px)) var(--tree-width);
+  grid-template-rows: auto 1fr;
+  align-items: start;
   justify-content: center;
-  gap: 1.5rem;
+  column-gap: 1.5rem;
   margin-top: 1rem;
 }
+/* The cat tree stands on the page floor beside the photos (5.5rem below the
+   gallery, minus the cats' 3px floor inset). */
+.cat-tree {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: end;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 120 / 200;
+  margin-bottom: calc(3px - 5.5rem);
+  pointer-events: none;
+}
+.cat-tree__art { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.cat-tree__pad { position: absolute; height: 1px; }
 .cat-section {
   display: flex;
   flex-direction: column;
@@ -503,7 +522,8 @@ a:hover { text-decoration: underline; }
   .pub-card { grid-template-columns: 1fr; }
   .pub-card__thumb { width: 100%; height: auto; aspect-ratio: 16/9; }
   .news-row { grid-template-columns: 1fr; gap: 0.05rem; }
-  .cat-gallery { grid-template-columns: minmax(0, 300px); }
+  .cat-gallery { grid-template-columns: minmax(0, 300px); grid-template-rows: none; row-gap: 1.5rem; }
+  .cat-tree { display: none; }
   .miscellanea-page > .cat-play-toolbar { left: 0.25rem; bottom: 0.75rem; }
 }
 
